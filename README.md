@@ -14,14 +14,18 @@ make install   # installs to ~/bin
 zit ./path/to/source.zig
 ```
 
+## Example
+
+```sh
+zit examples/hello.zig
+```
+
 ## Runtime comparison
 
-| scenario | command | median |
-|---|---|---:|
-| fresh recompile | `zig run examples/hello.zig` | `3616 ms` |
-| fresh recompile | `zit --force examples/hello.zig` | `1968 ms` |
-| cached run | `zig run examples/hello.zig` | `24 ms` |
-| cached run | `zit examples/hello.zig` | `2 ms` |
+| scenario | zig run (`examples/hello.zig`) | zit (`examples/hello.zig`) |
+|---|---:|---:|
+| cold start | `3616 ms` | `1968 ms` (`--force`) |
+| warm start | `24 ms` | `2 ms` |
 
 ## Bench env (container)
 
