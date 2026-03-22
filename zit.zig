@@ -70,6 +70,7 @@ pub fn main() !u8 {
     hashField(&hasher, opt_mode);
     hashField(&hasher, zigVersion());
 
+    var has_shebang = false;
     var source_buf: [8192]u8 = undefined;
     const source = blk: {
         const fd = std.posix.openat(std.posix.AT.FDCWD, source_path, .{}, 0) catch |err| {
@@ -87,12 +88,14 @@ pub fn main() !u8 {
                 stderrPrint("zit: cannot read '{s}': {s}\n", .{ source_path, @errorName(err) });
                 return 1;
             };
+            has_shebang = hasShebang(source_alloc);
             hashField(&hasher, source_alloc);
             hashImports(&hasher, source_alloc, source_path, gpa);
             gpa.free(source_alloc);
             break :blk source_buf[0..0]; // sentinel: used allocator path
         }
         const src = source_buf[0..n];
+        has_shebang = hasShebang(src);
         hashField(&hasher, src);
         hashImports(&hasher, src, source_path, gpa);
         break :blk src;
@@ -121,8 +124,32 @@ pub fn main() !u8 {
         const emit_arg = try std.fmt.allocPrint(gpa, "-femit-bin={s}", .{cached_bin});
         defer gpa.free(emit_arg);
 
+        var compile_source_path: []const u8 = source_path;
+        var temp_source_path: ?[]u8 = null;
+        if (has_shebang) {
+            const source_alloc = fs.cwd().readFileAlloc(gpa, source_path, 64 * 1024 * 1024) catch |err| {
+                stderrPrint("zit: cannot read '{s}': {s}\n", .{ source_path, @errorName(err) });
+                return 1;
+            };
+            defer gpa.free(source_alloc);
+
+            const stripped = stripShebang(source_alloc);
+            const temp = try std.fmt.allocPrint(gpa, "{s}/{s}.src.zig", .{ cache_dir, &hex });
+            errdefer gpa.free(temp);
+            fs.cwd().writeFile(.{ .sub_path = temp, .data = stripped }) catch |err| {
+                stderrPrint("zit: cannot prepare shebang source: {s}\n", .{@errorName(err)});
+                return 1;
+            };
+            temp_source_path = temp;
+            compile_source_path = temp;
+        }
+        defer if (temp_source_path) |temp| {
+            fs.cwd().deleteFile(temp) catch {};
+            gpa.free(temp);
+        };
+
         var compile = process.Child.init(
-            &.{ "zig", "build-exe", source_path, emit_arg, opt_mode, "-fstrip", "-fno-llvm", "-fno-unwind-tables" },
+            &.{ "zig", "build-exe", compile_source_path, emit_arg, opt_mode, "-fstrip", "-fno-llvm", "-fno-unwind-tables" },
             gpa,
         );
         compile.stderr_behavior = .Inherit;
@@ -178,6 +205,16 @@ pub fn main() !u8 {
     const err = std.posix.execveZ(cached_bin_z, argv_ptr, envp);
     stderrPrint("zit: exec failed: {s}\n", .{@errorName(err)});
     return 1;
+}
+
+fn hasShebang(source: []const u8) bool {
+    return source.len >= 2 and source[0] == '#' and source[1] == '!';
+}
+
+fn stripShebang(source: []const u8) []const u8 {
+    if (!hasShebang(source)) return source;
+    const newline = mem.indexOfScalar(u8, source, '\n') orelse return source[source.len..];
+    return source[newline + 1 ..];
 }
 
 /// Length-prefix a field into the hasher to avoid domain collisions.

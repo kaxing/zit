@@ -11,13 +11,25 @@ make install   # installs to ~/bin
 ## Usage
 
 ```sh
+# run a zig file
 zit ./path/to/source.zig
+
+# or run it directly via shebang
+chmod +x ./path/to/source.zig
+./path/to/source.zig
 ```
 
-## Example
+```zig
+#!/usr/bin/env zit
+const std = @import("std");
+pub fn main() void { std.debug.print("hello\n", .{}); }
+```
 
 ```sh
+# project example
 zit examples/hello.zig
+chmod +x examples/hello.zig
+./examples/hello.zig
 ```
 
 ## Runtime comparison

@@ -1,3 +1,4 @@
+#!/usr/bin/env zit
 const std = @import("std");
 
 pub fn main() !void {
