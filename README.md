@@ -24,7 +24,7 @@ zit examples/hello.zig
 
 | scenario | zig run (`examples/hello.zig`) | zit (`examples/hello.zig`) |
 |---|---:|---:|
-| cold start | `3616 ms` | `1968 ms` (`--force`) |
+| cold start | `3616 ms` | `1968 ms` (`--recompile`) |
 | warm start | `24 ms` | `2 ms` |
 
 ## Bench env (container)

@@ -12,28 +12,21 @@ fn stderrPrint(comptime fmt: []const u8, args: anytype) void {
 }
 
 pub fn main() !u8 {
-    // Fixed buffer allocator: eliminates all mmap/mremap syscalls from page_allocator.
-    // 64KB is plenty for argv + source file (typical scripts are <10KB).
-    // Falls back to page_allocator for huge files.
+    // Use a small fixed buffer to avoid page allocator overhead on common paths.
+    // Falls back to heap allocation for larger inputs.
     var fba_buf: [16384]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&fba_buf);
     const gpa = fba.allocator();
 
     const all_args = try process.argsAlloc(gpa);
-    // No need to free — we execve or exit anyway.
+    // No explicit free is needed; process exits or execs.
 
     if (all_args.len < 2) {
         stderrPrint(
-            \\usage: zit [options] <source.zig> [args...]
-            \\
-            \\Run Zig source files like scripts. Compiles once, caches the
-            \\binary, and re-compiles only when the source content changes.
-            \\
-            \\options:
-            \\  --clean   Remove all cached binaries and exit
-            \\  --force   Recompile even if cached
-            \\  --debug   Build in Debug mode (default: ReleaseSmall)
-            \\
+            \\usage: zit [--clean] [--debug] [--recompile] <source.zig> [args...]
+            \\  --clean       clear cache and exit
+            \\  --debug       build with -ODebug
+            \\  --recompile   rebuild even if cached
         , .{});
         return 1;
     }
@@ -41,7 +34,7 @@ pub fn main() !u8 {
     // Parse zit's own flags
     var arg_idx: usize = 1;
     var opt_mode: []const u8 = "-OReleaseSmall";
-    var force = false;
+    var recompile = false;
 
     while (arg_idx < all_args.len) {
         const arg = all_args[arg_idx];
@@ -57,8 +50,8 @@ pub fn main() !u8 {
         } else if (mem.eql(u8, arg, "--debug")) {
             opt_mode = "-ODebug";
             arg_idx += 1;
-        } else if (mem.eql(u8, arg, "--force")) {
-            force = true;
+        } else if (mem.eql(u8, arg, "--recompile")) {
+            recompile = true;
             arg_idx += 1;
         } else break;
     }
@@ -71,8 +64,7 @@ pub fn main() !u8 {
     const source_path = all_args[arg_idx];
     const forward_args = all_args[arg_idx + 1 ..];
 
-    // Read source and hash in one pass. Use pread with stack buffer to avoid
-    // stat + read + read(EOF) pattern from readFileAlloc (saves 2 syscalls).
+    // Read and hash source with a stack buffer first; fall back to allocated read for larger files.
     var hasher = std.hash.XxHash3.init(0);
     hashField(&hasher, source_path);
     hashField(&hasher, opt_mode);
@@ -119,8 +111,8 @@ pub fn main() !u8 {
     const cached_bin = try std.fmt.allocPrint(gpa, "{s}/{s}", .{ cache_dir, &hex });
     defer gpa.free(cached_bin);
 
-    // Build if binary not cached (or --force)
-    const needs_build = force or blk: {
+    // Build if binary not cached (or --recompile)
+    const needs_build = recompile or blk: {
         fs.cwd().access(cached_bin, .{}) catch break :blk true;
         break :blk false;
     };
@@ -167,7 +159,7 @@ pub fn main() !u8 {
     cached_bin_z_buf[cached_bin.len] = 0;
     const cached_bin_z: [*:0]const u8 = cached_bin_z_buf[0..cached_bin.len :0];
 
-    // Max 64 forwarded args should be plenty for scripts
+    // Support up to 64 forwarded arguments.
     var argv_storage: [66]?[*:0]const u8 = undefined;
     if (forward_args.len + 2 > argv_storage.len) {
         stderrPrint("zit: too many arguments\n", .{});
