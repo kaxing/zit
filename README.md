@@ -1,5 +1,5 @@
 # zit
-zig with a typo, somehow faster than `zig run` (**1.84× faster**).
+zig with a typo, somehow faster than `zig run` (**1.64× faster**).
 
 ## Install
 
@@ -41,15 +41,11 @@ chmod +x examples/hello.zig
 ./examples/hello.zig
 ```
 
-## Runtime comparison
+## Comparison
 
-| scenario | zig run (`examples/hello.zig`) | zit (`examples/hello.zig`) |
+Bench env: Linux container (x86_64), Zig `0.15.2`, 3 rounds, workload: `hello.zig` source (shebang-stripped copy).
+
+| scenario | zig run | zit |
 |---|---:|---:|
-| cold start | `3616 ms` | `1968 ms` (`--recompile`) |
-| warm start | `24 ms` | `2 ms` |
-
-## Bench env (container)
-
-- Linux container, x86_64
-- Zig `0.15.2`
-- workload: `examples/hello.zig`
+| cold start | `2331 ms` | `1419 ms` (`--recompile`) |
+| warm start | `16 ms` | `1 ms` |

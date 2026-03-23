@@ -41,14 +41,11 @@ pub fn main() !u8 {
         return toggleShebang(gpa, all_args[2]);
     }
 
-    var opt_mode: []const u8 = "-OReleaseSmall";
+    const opt_mode = "-OReleaseSmall";
     var recompile = false;
     while (arg_idx < all_args.len) {
         const arg = all_args[arg_idx];
-        if (mem.eql(u8, arg, "--debug")) {
-            opt_mode = "-ODebug";
-            arg_idx += 1;
-        } else if (mem.eql(u8, arg, "--recompile")) {
+        if (mem.eql(u8, arg, "--recompile")) {
             recompile = true;
             arg_idx += 1;
         } else if (mem.startsWith(u8, arg, "-")) {
@@ -213,7 +210,7 @@ pub fn main() !u8 {
 fn printUsage() void {
     stderrPrint(
         \\usage:
-        \\  zit [--debug] [--recompile] <source.zig> [args...]
+        \\  zit [--recompile] <source.zig> [args...]
         \\  zit clean-caches
         \\  zit toggle-shebang <source.zig>
     , .{});
