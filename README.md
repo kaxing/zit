@@ -11,10 +11,19 @@ make install   # installs to ~/bin
 ## Usage
 
 ```sh
-# run a zig file
+# run
 zit ./path/to/source.zig
 
-# or run it directly via shebang
+# force rebuild
+zit --recompile ./path/to/source.zig
+
+# clean all caches
+zit clean-caches
+
+# toggle shebang in-place
+zit toggle-shebang ./path/to/source.zig
+
+# run directly via shebang
 chmod +x ./path/to/source.zig
 ./path/to/source.zig
 ```

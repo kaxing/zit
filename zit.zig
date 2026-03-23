@@ -22,42 +22,45 @@ pub fn main() !u8 {
     // No explicit free is needed; process exits or execs.
 
     if (all_args.len < 2) {
-        stderrPrint(
-            \\usage: zit [--clean] [--debug] [--recompile] <source.zig> [args...]
-            \\  --clean       clear cache and exit
-            \\  --debug       build with -ODebug
-            \\  --recompile   rebuild even if cached
-        , .{});
+        printUsage();
         return 1;
     }
 
-    // Parse zit's own flags
     var arg_idx: usize = 1;
+    const first = all_args[1];
+
+    if (mem.eql(u8, first, "clean-caches")) {
+        return cleanCaches(gpa);
+    }
+    if (mem.eql(u8, first, "toggle-shebang")) {
+        if (all_args.len < 3) {
+            stderrPrint("zit: missing target source file\n", .{});
+            printUsage();
+            return 1;
+        }
+        return toggleShebang(gpa, all_args[2]);
+    }
+
     var opt_mode: []const u8 = "-OReleaseSmall";
     var recompile = false;
-
     while (arg_idx < all_args.len) {
         const arg = all_args[arg_idx];
-        if (mem.eql(u8, arg, "--clean")) {
-            const cache_dir = try getCacheDir(gpa);
-            defer gpa.free(cache_dir);
-            fs.cwd().deleteTree(cache_dir) catch |err| {
-                stderrPrint("zit: cannot clean cache: {s}\n", .{@errorName(err)});
-                return 1;
-            };
-            stderrPrint("zit: cache cleared ({s})\n", .{cache_dir});
-            return 0;
-        } else if (mem.eql(u8, arg, "--debug")) {
+        if (mem.eql(u8, arg, "--debug")) {
             opt_mode = "-ODebug";
             arg_idx += 1;
         } else if (mem.eql(u8, arg, "--recompile")) {
             recompile = true;
             arg_idx += 1;
+        } else if (mem.startsWith(u8, arg, "-")) {
+            stderrPrint("zit: unknown option '{s}'\n", .{arg});
+            printUsage();
+            return 1;
         } else break;
     }
 
     if (arg_idx >= all_args.len) {
         stderrPrint("zit: no source file specified\n", .{});
+        printUsage();
         return 1;
     }
 
@@ -205,6 +208,59 @@ pub fn main() !u8 {
     const err = std.posix.execveZ(cached_bin_z, argv_ptr, envp);
     stderrPrint("zit: exec failed: {s}\n", .{@errorName(err)});
     return 1;
+}
+
+fn printUsage() void {
+    stderrPrint(
+        \\usage:
+        \\  zit [--debug] [--recompile] <source.zig> [args...]
+        \\  zit clean-caches
+        \\  zit toggle-shebang <source.zig>
+    , .{});
+}
+
+fn cleanCaches(gpa: mem.Allocator) u8 {
+    const cache_dir = getCacheDir(gpa) catch |err| {
+        stderrPrint("zit: cannot resolve cache dir: {s}\n", .{@errorName(err)});
+        return 1;
+    };
+    defer gpa.free(cache_dir);
+
+    fs.cwd().deleteTree(cache_dir) catch {};
+    stderrPrint("zit: cache cleared ({s})\n", .{cache_dir});
+    return 0;
+}
+
+fn toggleShebang(gpa: mem.Allocator, source_path: []const u8) u8 {
+    const source = fs.cwd().readFileAlloc(gpa, source_path, 64 * 1024 * 1024) catch |err| {
+        stderrPrint("zit: cannot read '{s}': {s}\n", .{ source_path, @errorName(err) });
+        return 1;
+    };
+    defer gpa.free(source);
+
+    const shebang = "#!/usr/bin/env zit\n";
+    if (hasShebang(source)) {
+        const stripped = stripShebang(source);
+        fs.cwd().writeFile(.{ .sub_path = source_path, .data = stripped }) catch |err| {
+            stderrPrint("zit: cannot update '{s}': {s}\n", .{ source_path, @errorName(err) });
+            return 1;
+        };
+        stderrPrint("zit: shebang removed ({s})\n", .{source_path});
+        return 0;
+    }
+
+    const with_shebang = std.fmt.allocPrint(gpa, "{s}{s}", .{ shebang, source }) catch |err| {
+        stderrPrint("zit: cannot build shebang source: {s}\n", .{@errorName(err)});
+        return 1;
+    };
+    defer gpa.free(with_shebang);
+
+    fs.cwd().writeFile(.{ .sub_path = source_path, .data = with_shebang }) catch |err| {
+        stderrPrint("zit: cannot update '{s}': {s}\n", .{ source_path, @errorName(err) });
+        return 1;
+    };
+    stderrPrint("zit: shebang added ({s})\n", .{source_path});
+    return 0;
 }
 
 fn hasShebang(source: []const u8) bool {
