@@ -152,7 +152,7 @@ pub fn main() !u8 {
         };
 
         var compile = process.Child.init(
-            &.{ "zig", "build-exe", compile_source_path, emit_arg, opt_mode, "-fstrip", "-fno-llvm", "-fno-unwind-tables" },
+            &.{ "zig", "build-exe", compile_source_path, emit_arg, opt_mode, "-fstrip", "-fno-unwind-tables" },
             gpa,
         );
         compile.stderr_behavior = .Inherit;
