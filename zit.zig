@@ -12,11 +12,9 @@ fn stderrPrint(comptime fmt: []const u8, args: anytype) void {
 }
 
 pub fn main() !u8 {
-    // Use a small fixed buffer to avoid page allocator overhead on common paths.
-    // Falls back to heap allocation for larger inputs.
-    var fba_buf: [16384]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&fba_buf);
-    const gpa = fba.allocator();
+    // Use stack allocations for the common path, with dynamic fallback.
+    var sfa = std.heap.stackFallback(16 * 1024, std.heap.page_allocator);
+    const gpa = sfa.get();
 
     const all_args = try process.argsAlloc(gpa);
     // No explicit free is needed; process exits or execs.
